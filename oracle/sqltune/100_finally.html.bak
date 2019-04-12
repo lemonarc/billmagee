@@ -1,0 +1,88 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  An introduction to SQL statement tuning
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>AN INTRODUCTION TO ORACLE SQL STATEMENT TUNING</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 21st Feb 2003 </FONT><br>
+<hr>
+
+<p>
+  <FONT SIZE=4> <b>A FINAL FEW WORDS</b></FONT><br>
+<p>
+
+<p><FONT SIZE=3><b>Credits</b></FONT><p>
+
+I was going to thank my Mum but she can't spell Oracle. I couldn't really tell you where the
+content for this document came from. I've always had an unhealthy fascination with performance
+and generally it's been from trial and error, making my own mistakes but most importantly listening and
+reading.
+<p>
+There are many useful sites and forums on the web where a developer might meet a DBA,
+a data warehouse developer dealing with terrabytes of data might meet another developer building
+a home video library as hist first Oracle project.
+<p>
+I really cannot begin to highlight the benefit of being around these chaps while they discuss or
+argue about their performance problems. He who sits and listens gets stiff knees, but he also learns alot.
+<p>
+As well as gleaning information from the people around you, have a quick check back to the Oracle
+Documentation every now and then. A good developer and friend of mine recently mentioned that
+he is often confused by extents and segments. It's not really a developers area but a quick look in
+the 8.1.7 docs reveals one paragraph which explains the concept without getting too detailed.
+<p>
+Next time you have that feeling, get the docs and take a moment to look. Anyway, enough of that for
+now, I'm off to read about the extensible optimiser and global hints:-)
+<p>
+
+<p><FONT SIZE=3><b>Resources and Links</b></FONT><p>
+
+Some other places of interest
+<p>
+<table width = 85% align=center border=0>
+   <tr>
+   <td valign=top><a href="http://www.dbforums.com"title="">www.dbforums.com</a></td>
+   <td valign=top>DbForums has an active Oracle forum with a some very experienced and knowledgable guys
+       hanging around. I would recommend it as a place to ask</td>
+   </tr>
+
+   <tr>
+   <td valign=top><a href="http://www.oracle.com"title="">www.oracle.com</a></td>
+   <td valign=top>It goes without saying that Oracle's site has a wealth of information, white papers
+                  and active forums. You can also read Documentation on-line</td>
+   </tr>
+
+   <tr>
+   <td valign=top><a href="http://www.google.com"title="">www.google.com</a></td>
+   <td valign=top>As with any subject, Google groups are probably the first place you'll
+                  go to find answers. Someone once said that whatever your question,
+                  somebody will have already answered it on Usenet. "If it takes a week
+                  to walk a fortnight, how many apples in a barrel of grapes?" proved it
+                  was just a myth.</td>
+   </tr>
+
+   <tr>
+   <td valign=top><a href="http://www.billmagee.co.uk"title="">www.billmagee.co.uk</a></td>
+   <td valign=top>Not much about Oracle, but deserves a mention</td>
+   </tr>
+
+   <tr>
+   <td valign=top><a href="http://pipetalk.quest-pipelines.com/~plsql"title="">http://pipetalk.quest-pipelines.com/~plsql</a></td>
+   <td valign=top>Oracle FAQ's and forum</td>
+   </tr>
+
+
+
+
+
+</table>
+
+<p>
+
+<a href="index.html" title="Back to main contents page">Back to Contents</a>
+
+</HTML>

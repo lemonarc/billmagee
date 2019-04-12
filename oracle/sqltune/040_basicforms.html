@@ -1,0 +1,130 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  An introduction to SQL statement tuning
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>AN INTRODUCTION TO ORACLE SQL STATEMENT TUNING</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 21st Feb 2003 </FONT><br>
+<hr>
+
+<p>
+  <FONT SIZE=4> <b>THE BASIC FORMS OF ORACLE DATA RETRIEVAL</b></FONT><br>
+<p>
+
+The following sections attempt to explain the various manners in which Oracle will read and work with
+the data available in order to satisfy your queries. It covers the main concepts in order that you may
+better understand later sections of this document.
+
+
+
+
+
+<p><FONT SIZE=3><b>Full table scan   </b></FONT><p>
+The full table scan is generally the biggest performance killer of any server or statement. A full table
+scan may be used by Oracle for two reasons:
+<ul>
+<li>There are no other access paths available (no indexes that could be used for your SQL)</li>
+<li>The Oracle optimiser has decided it is cheaper to use a full table scan rather than available indexes</li>
+</ul>
+
+A full table scan means that Oracle will read every single row of the table from disk and compare it
+against your where clause before continuing. Imagine a table as follows...
+<PRE CLASS="CE2">
+   CREATE TABLE LOTS_OF_NUMBERS
+      (
+       NUMBER_VALUE NUMBER(10)
+      )
+</PRE>
+
+If we populated the table with 250,000 rows, the NUMBER_VALUE column being 1..250000 we would have
+a table such
+<PRE CLASS="CE2">
+   SELECT *
+   FROM   LOTS_OF_NUMBERS;
+
+   NUMBER_VALUE
+   ============
+   1
+   2
+   3
+   ...
+   249998
+   249999
+   250000
+</PRE>
+
+The statement to retrieve the data in the entire table forces Oracle to do a full table scan. You want to
+list the entire table, the entire table must be read. In essence, any statement whatsoever which access
+this table will force a full table scan. On the system I'm sitting at I know the database block size to
+be 8K and I can determine from Oracle that the table occupies 384 blocks. This means that each full table
+scan will force Oracle to read 3Mb of data.
+<p>
+If we changed our query to
+<PRE CLASS="CE2">
+   SELECT *
+   FROM   LOTS_OF_NUMBERS
+   WHERE  NUMBER_VALUE < 2;
+</PRE>
+Oracle will still have to perform a full table scan just to return the single row we require.
+
+<p><FONT SIZE=3><b>Index range scan  </b></FONT><p>
+For the table we created above and the type of statement we are likely to be executing, it would probably
+be sensible to have an index on the NUMBER_VALUE column. For our purposes it doesn't matter too much whether
+we build a unique or non unique index.
+<p>
+<PRE CLASS="CE2">
+   CREATE UNIQUE INDEX LOTS_OF_NUMBERS_NUMVAL_IND ON LOTS_OF_NUMBERS(NUMBER_VALUE)
+</PRE>
+
+We run the query again...
+
+<PRE CLASS="CE2">
+   SELECT *
+   FROM   LOTS_OF_NUMBERS
+   WHERE  NUMBER_VALUE < 2
+</PRE>
+
+This time Oracle has read only two data blocks (16Kb) in order to satisfy the query. Oracle can scan the
+index very quickly to find the rows which fall within the range.
+<p>
+An index range scan will not have a constant workload for the same type of query. For instance if we
+change the statement to
+<PRE CLASS="CE2">
+   SELECT *
+   FROM   LOTS_OF_NUMBERS
+   WHERE  NUMBER_VALUE < 2000
+</PRE>
+Oracle must scan a larger range of the index (more disk reads) and also return more rows.
+<p>
+<b>*</b> Point to Note: On small tables (I've never found a definition of a 'small' table) Oracle will almost
+always perform a full table scan. Oracle will often determine that to access a table via an index,
+when the whole table can be read very quickly, using the index will actually result in a higher workload.
+I have seen and tested this behaviour on tables up to 50,000 rows on a server with little load. You
+should note that the point at which Oracle will begin to use the index will vary depending on the actual
+table (width or number of columns), the current workload on the server, memory available etc.
+<p>
+
+
+<p><FONT SIZE=3><b>Index unique scan </b></FONT><p>
+
+Where a unique index exists on a column and you are searching for a single value in the column, Oracle can
+use the unique index, knowing perfectly well there will be a maximum of one possible value or row. The form
+of indexing (usually B-Tree) used on Oracle almost guarantees an absolutely definable workload for any
+possible value regardless of the size of the table.
+<p>
+
+
+In an ideal world, every query of every type on every table could be satisfied by an index unique scan.
+Unfortunately that is not the case and Oracle has to use a combination of methods to satisfy a query.
+We shall move on to the various forms of optimisation that Oracle uses to determine the best way to
+perform a query, and then onto how you can see this in action.
+<p>
+
+<a href="index.html" title="Back to main contents page">Back to Contents</a>
+
+</HTML>

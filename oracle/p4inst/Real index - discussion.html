@@ -1,0 +1,55 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  Oracle installation issues on Pentium IV's
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>ORACLE INSTALLATION ISSUES ON PENTIUM IV</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 27th March 2003 </FONT><br>
+<hr>
+<p>
+
+<b>Q.</b> The oracle installer splash screen opens but then closed down with no warning. What's up?<br>
+<b>Q.</b> I've heard there are problems running Oracle on P4's, what are they?<br>
+<p>
+I have seen this and variations of this question so many times on the Oracle forums I thought it was time to create a static
+link to a description of the problem. The problem and it's workaround are so well documented that I do not propose to go into full detail here. Some people on the
+forums would say that if you can't google for the problem and solution, you probably shouldn't be playing with Oracle. I'll
+reserve judgement on that one.
+<p>
+<b>DISCLAIMER</b>
+<ul>
+   <li>Use the following entirely at your own risk. I accept no responsibility whatsoever for any errors/problems/cold coffee
+       etc which you may encounter as a result of following these instructions</li>
+</ul>
+
+<p>
+<b>SUMMARY</b>
+<ul>
+   <li>The Oracle installer uses the JRE (Java Runtime Environment) as it is written in Java.   </li>
+   <li>Some versions of the JRE have a CPU detection bug which manifests itself on P4's.        </li>
+   <li>The JRE shipped on some (but not all) Oracle installation CD's includes the bugged JRE.  </li>
+   <li>There is a simple workaround.                                                            </li>
+</ul>
+<p>
+<b>SOLUTION</b>
+<ul>
+   <li>Copy the entire installation CD to a folder on your hard drive somewhere.                                           </li>
+   <li>Search for *all* copies of SYMCJIT.DLL on your PC including the folder where you copied the Oracle installation CD. </li>
+   <li>Rename every copy of SYMCJIT.DLL to SYMCJIT.OLD or something similar.                                               </li>
+   <li>Run the installer from the folder where you copied the installation CD to.                                          </li>
+</ul>
+<p>
+The Oracle installer will now run fine. Post installation you can rename all of SYMCJIT.OLD back to SYMCJIT.DLL as it is not used
+at all by Oracle once installation is complete. If you do rename it back though, some of the Java based Oracle client tools
+might not work (DBCA for example) but the Oracle server itself is fine. Personally I just leave the files in the .old state,
+they're not needed by anything that I know of anyway.
+<p>
+
+<a href="http://www.google.com/search?hl=en&ie=UTF-8&oe=UTF-8&q=symcjit+oracle"  title="More information on Google"> More information from Google</a>
+
+</HTML>

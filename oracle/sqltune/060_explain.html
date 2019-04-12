@@ -1,0 +1,196 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  An introduction to SQL statement tuning
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>AN INTRODUCTION TO ORACLE SQL STATEMENT TUNING</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 21st Feb 2003 </FONT><br>
+<hr>
+
+<p>
+  <FONT SIZE=4> <b>OBTAINING THE ACCESS PLAN FOR A STATEMENT</b></FONT><br>
+<p>
+
+There are many tools available to help you tune your SQL. Some tools are aimed at DBA's to monitor the
+server, some at developers to help tune their statements. I have always preferred the standard explain
+plan for tuning my statements. The main reason is that it is always available, you don't need permission to
+install it on a clients network and it is reliable.
+<p>
+I would recommend to any developer just venturing into SQL tuning to stay with explain plan. Ignore the
+snake oil being offered by other vendors for the moment and aim to grasp the fundamentals of access paths
+before moving onto 3rd party tools.
+<p>
+Explain plan can be used for any select, insert, update or delete statement. It can also be used
+against statements containing PL/SQL function and packaged function calls.
+<p>
+
+
+<p><FONT SIZE=3><b>Creating the necessary tables</b></FONT><p>
+Before you can use EXPLAIN PLAN you must have a suitable table in which the plan results are stored.
+Oracle supplies a script to create this table called 'utlxplan.sql' or 'XPLAINPL.SQL' (different
+database versions vary). All the script does is create a table.
+<p>
+<a href="utlxplan.sql"title="Create table script">UTLXPLAN.SQL</a>
+<p>
+A suitable plan table might already exist. Usually a single plan table is created a public synonym created
+for all users with the appropriate priveleges.
+
+
+<p><FONT SIZE=3><b>The Explain Plan</b></FONT><p>
+The explain plan is simply a list of the operations which Oracle has chosen to perform your query. The
+actual output of the plan can at first site look complicated but Oracle have supplied scripts to
+simplify the output.
+<p>
+The main form of obtaining a plan is very simple
+<PRE CLASS="CE2">
+   EXPLAIN PLAN FOR
+   SELECT *
+   FROM   LOTS_OF_NUMBERS
+   WHERE  NUMBER_VALUE < 3000
+</PRE>
+This will generate the rows in the the plan table which by default is called 'PLAN_TABLE'. The problem
+is that many developers might also be explaining plans into that table and so it would be difficult to
+distinguish which rows belong to which statement / developer.
+<p>
+You can be more specific by including a statement ID
+<PRE CLASS="CE2">
+   EXPLAIN PLAN SET STATEMENT_ID = 'Numbers3000' FOR
+   SELECT *
+   FROM   LOTS_OF_NUMBERS
+   WHERE  NUMBER_VALUE < 3000
+</PRE>
+
+The number of rows inserted into the plan table vary depending on the statement you are requesting the plan
+for. Oracle simply inserts the rows into the table regardless of whether any are already there, what the
+statement id's are etc. As such the contents of the plan table can be committed or rolled back just like
+any other.
+<p>
+The content of the table can look a little daunting, and so I would suggest you use one of the many
+scripts available for the task.
+
+
+
+
+<p><FONT SIZE=3><b>Querying the plan tables</b></FONT><p>
+There are many variations of how to query the plan table. I would recommend for the moment that you begin
+with the Oracle supplied 'utlxpls.sql' which is designed to return the plan for the last serial query (ie
+non parallel execution) in the plan table. Even the SQL to query the plan table looks complex, but we do
+not need to know any of the detail - just the result.
+<p>
+<a href="utlxpls.sql"title="Query the plan table">UTLXPLS.SQL</a>
+<p>
+In SQLPlus issuing the following command will return the results for the last explain plan (which was against
+the last SQL statement above).
+<PRE CLASS="CE2">
+   @utlxpls.sql;
+
+   | Operation                 |  Name    |  Rows | Bytes|  Cost  | Pstart| Pstop |
+   --------------------------------------------------------------------------------
+   | SELECT STATEMENT          |          |     3K|   11K|      8 |       |       |
+   |  INDEX RANGE SCAN         |LOTS_OF_N |     3K|   11K|      8 |       |       |
+   --------------------------------------------------------------------------------
+
+</PRE>
+
+That's a fairly simple plan, we can see that Oracle is going to scan a range of values from the an index,
+unfortunately the formatting is a little of and we can't quite see the whole index name. You can modify
+the SQL in utlxpls.sql if you wish to avoid this.
+<p>
+We can see that as a result of the index range scan, Oracle will fetch 3000 rows, a total of 11000 bytes
+with a total cost (Disk I/O) of 8 (at 8K per block that's 64K of disk reads).
+<p>
+Here's a slightly more complex plan...
+<PRE CLASS="CE2">
+| Operation                 |  Name    |  Rows | Bytes|  Cost  | Pstart| Pstop |
+--------------------------------------------------------------------------------
+| SELECT STATEMENT          |          |     4 |  116 |      3 |       |       |
+|  FILTER                   |          |       |      |        |       |       |
+|   HASH JOIN OUTER         |          |     4 |  116 |      3 |       |       |
+|    TABLE ACCESS FULL      |C_CURRENC |     3 |   48 |      1 |       |       |
+|    TABLE ACCESS FULL      |C_CURRENC |     4 |   52 |      1 |       |       |
+|   SORT AGGREGATE          |          |     1 |   10 |        |       |       |
+|    FIRST ROW              |          |     2 |   20 |      1 |       |       |
+|     INDEX RANGE SCAN (MIN/|C_CURRENC |     2 |      |      1 |       |       |
+--------------------------------------------------------------------------------
+</PRE>
+We don't need to see the actual SQL but starting with the innermost statements (the bottom) we can
+see that Oracle is going to use an index range scan to find a minimum or maximum value. It also knows
+it only needs the first result of this.
+<p>
+Both tables are tiny, so full table scans have been opted for even though indexes exist, the tables will be
+read into memory and hash joined (Oracle will hash the primary keys to perform the join).
+<p>
+The result will then be sorted to apply the lower join and the entire result set filtered
+to obtain the required row.
+<p>
+Total bytes worked with is 116, and the cost in disk I/O is 3 blocks (24K).
+<p>
+The intricacies of each row in the plan table are far too detailed to go into here. In fact I'm not sure
+I would be able to adequately explain each type of row you might see. All I can suggest is that you
+look for...
+<ul>
+   <li>Full table scans (except very small tables)</li>
+   <li>Index scans which return a large number of rows</li>
+   <li>In memory sorts or hash joins which use a large amount of memory</li>
+   <li>A high cost (Disk I/O)</li>
+</ul>
+If you see any of these you should stop and consider whether there is a better way to perform your SQL.
+Much earlier on we discussed the age/gender table. Consider the plans for the following statements...
+<PRE CLASS="CE2">
+   SELECT *
+   FROM   (
+          SELECT *
+	  FROM   PEOPLE
+          WHERE  GENDER = 'M'
+          )
+   WHERE  AGE = 34;
+
+   SELECT *
+   FROM   (
+          SELECT *
+	  FROM   PEOPLE
+          WHERE  AGE = 34
+          )
+   WHERE  GENDER = 'M';
+
+</PRE>
+
+I know both statements are never going to be found in the real world but they show the point. The first
+statement would cause an index range scan resulting in 10000 records being filtered in memory (and the
+relevant amount Disk I/O and memory usage. The second statement would cause an index range scan resulting
+in 200 records being filtered in memory. The Disk I/O of the second statement would also be subsequently
+lower.
+<p>
+Both statements achieve the same result, but with the first statement being 50 times more resource hungry.
+<p>
+
+
+
+<p><FONT SIZE=3><b>Doing it the TOAD way</b></FONT><p>
+TOAD Is becoming more and more popular and I see it at many more customer sites by the day. As it is also
+my tool of choice I though it only fair to include a nice feature of TOAD which simplifies obtaining a
+plan.
+<p>
+TOAD also requires a plan table to be present and supplies it's own script for this purpose. If it has
+not already been executed, you can find this script in your TOAD directory under the 'Temps' subdirectory.
+Under some versions of TOAD the 'TOADPREP.SQL' script builds the TOAD plan tables (along with other bits
+and pieces) and other versions have it in a separate script called 'TOADPLAN.SQL'.
+<p>
+Once this script has been executed you can obtain a plan quite simply at any SQL Editor window by placing
+your cursor on the statement and pressing CTRL-E.
+<p>
+If all is configured correctly you should see the following....
+<img src="toadplan.jpg" border=0 alt="A Toad Plan">
+<p>
+I find the Toad presentation of the plan results to be far easier to work with. If you use another third
+party tool (PLSQL Developer etc) they will almost certainly have a similar shortcut to obtain a plan.
+<p>
+
+<a href="index.html" title="Back to main contents page">Back to Contents</a>
+
+</HTML>

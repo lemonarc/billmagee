@@ -1,0 +1,450 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  An introduction to SQL statement tuning
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>AN INTRODUCTION TO ORACLE SQL STATEMENT TUNING</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 21st Feb 2003 </FONT><br>
+<hr>
+
+<p>
+  <FONT SIZE=4> <b>TUNING A SINGLE STATEMENT</b></FONT><br>
+<p>
+
+There are no hard and fast rules to statement tuning. Poor performance can be caused by any number
+of things, or any combination of a number of things. Each statement is unique, and unique in the
+context of the instance or schema it is running on.
+<p>
+It is not uncommon to see a statement which is highly efficient on a DEV or TEST instance, run
+like a dog on a production instance which is virtually identical. The state of the index statistics,
+server usage and load etc can all affect query performance. Query optimisation is very much instance and
+state dependant.
+<p>
+Another common issue over performance, is a statement or job which has been running fine for many years
+suddenly starts running like a dog. No-one has dropped any indexes, the statistics are up to date and
+there seems to be no apparent reason for the sudden degradation in performance. An often overlooked
+cause of this can actually be the addition of a new index to a table. On the surface it does not make
+sense that addition of an index could cause query degradation but as has already been shown, the cost
+based optimiser is not infallible. The optimiser may incorrectly surmise that the new index offers
+the best best access path based on the statistics.
+<p>
+
+
+<p><FONT SIZE=3><b>Interpreting the explain plan</b></FONT><p>
+Explain Plan is an invaluable tool for tuning your statements but it is no replacement for testing. Just
+because a statement is using an index does not mean your query will perform well. You should consider
+the plan as a guide to what is going on, but it still requires a little thought on your part.
+<p>
+The Oracle documentation has a comprehensive list of all columns in the plan table, I shall summarise
+the main ones of interest here.
+<p>
+
+<table width=85% align=center border=0>
+
+<tr><b>OPERATION</b><hr></tr>
+
+<tr>
+The table operations you will usually encounter in a plan are FULL TABLE SCAN, INDEX UNIQUE SCAN and
+INDEX RANGE SCAN. These refer to actual table access and the manner in which rows will be retrieved.
+You should not automatically assume that an INDEX SCAN of any description will automatically be
+efficient and that a FULL TABLE SCAN will not.
+<p>
+It is quite acceptable for a small table occupying only a few data blocks on disk to be be have a FULL
+TABLE SCAN at every access. An INDEX RANGE SCAN of a large table returning a large number of rows would
+have a much higher workload than the FULL TABLE SCAN of the small table.
+<p>
+Don't just assume that because all table accesses are through indexes that your statement will perform
+well.
+<p>
+The various table operations being performed will return a result set. Oracle will then perform further
+processing on these (imagine it as in memory processing) to further narrow down the results. These
+might be as a result of a join, or a predicate which could not be satisfied by available indexes. The
+types of operation you will usually see for these are FILTER, HASH JOIN, MERGE JOIN, SORT and NESTED LOOPS.
+<p>
+These operations also involve workload, although it is usually a memory and CPU workload rather than a disk I/O
+workload.
+<p>
+</tr>
+
+<tr><b>ROWS PROCESSED</b> (also called CARDINALITY)<hr></tr>
+<tr>
+In the plan table, the column named CARDINALITY is Oracle's estimate of the number of rows which will
+be processed by the operation. This figure is only available under the cost based optimiser and will
+be NULL for the rule based optimiser. It is important to note that this is an estimation and not a
+statement of fact.
+<p>
+</tr>
+
+
+
+<tr><b>BYTES READ</b><hr></tr>
+<tr>
+An estimation of the number of bytes accesses (read and/or processed) by the operation. Only available
+under the cost based optimiser and NULL for the rule based optimiser.
+<p>
+</tr>
+
+
+
+
+<tr><b>COST AND IT'S TRUE MEANING</b><hr></tr>
+<tr>
+Oracle documentation specifically states that the cost value of a plan has no unit of measurement. It is
+merely a weighted value used to compare costs between two execution plans. If you examine two execution
+plans and find one with a cost of 150 and another with a cost of 2000, it makes sense that the second
+is a much slower and much more resource intensive statement. Bear in mind though that these figures
+are based on an estimation given the statistics available. They are not absolute costs.
+<p>
+Through trial and error, and repeated use of plans you will begin to get a feel for what is an acceptable
+plan for a statement.
+
+
+<p>
+</tr>
+</table>
+
+
+The execution plan is useful in ensuring that Oracle is using indexes where you expect it to and
+in the manner you expect. It can give you a good idea of poor SQL against good SQL and allow you to
+check over a period of time that a statement is still being optimised in the manner you expect.
+<p>
+Once you feel comfortable with the output of the plans, you might consider moving on to post-analysis
+tools such as TkProf or SqlTrace. Unlike explain plan which shows you what Oracle plan's to do, these
+tools show actual execution statistics once the statement has been performed. Later, I will also show some
+other methods to achieve this without having to go through the configuration of TkProf.
+<p>
+
+
+<p><FONT SIZE=3><b>Consolidation of statements</b></FONT><p>
+
+Consider the following code
+<PRE CLASS="CE2">
+   DECLARE
+      CURSOR curOuter IS
+      SELECT Id
+      FROM   MyTable
+      WHERE  ID > 5000;
+
+      nID    MyTable.Id%TYPE;
+      nValue OtherTable.OtherValue%TYPE;
+   BEGIN
+      OPEN curOuter;
+      LOOP
+         FETCH curOuter INTO nID;
+         EXIT  WHEN curOuter%NOTFOUND;
+
+         BEGIN
+            SELECT OtherValue
+            INTO   nValue
+            FROM   OtherTable
+            WHERE  OtherID = nID;
+         EXCEPTION WHEN NO_DATA_FOUND THEN
+            nValue := NULL;
+         END;
+
+         IF nValue IS NOT NULL THEN
+            -- Do some processing with nID, nValue
+         END IF;
+      END LOOP;
+      CLOSE curOuter;
+   END;
+</PRE>
+Clearly OtherTable.OtherID has a relationship with MyTable.ID. It is most likely like a foreign key
+constraint and index will exist on OtherTable.OtherID.
+<p>
+If you ran an explain plan for both statements (the cursor and the select into) you might find that the
+plans are good for both, with a low cost and good performance. However, depending on how many rows are
+returned by the cursor, the inner select will be executed that many times.
+<p>
+If for instance the outer cursor returns 5000 rows and the inner select has a cost of 50, the true
+cost of the entire operation might be 5000 x 50 = 250,000.
+<p>
+This operation should almost certainly be performed via a join of OtherTable to MyTable where the entire
+cost might be in the low hundreds.
+<p>
+The point here is that just because each individual statement in your PL/SQL block is efficient, does
+not mean that your PL/SQL is also efficient. Unfortunately the style and design of your PL/SQL is way
+beyond anything I could possibly write here but please bear it in mind.
+<p>
+
+
+
+<p><FONT SIZE=3><b>Lateral thinking</b></FONT><p>
+There are numerous ways to write any statement, and there will invariably be statements from which you
+simply cannot squeeze any more performance. However, there are some simple pointers which may help
+in your tuning efforts. SQL is not a solution to bad design, but we will often be the guys having to
+work with existing designs.
+<p>
+Some thoughts / examples which spring to mind....
+<p>
+<table width=85% align=center border=0>
+
+<tr><b>THE INVESTMENT BANK</b><hr></tr>
+
+<tr>
+For security purposes an investment bank has double entry of all transactions entered throughout the day.
+Before the end of day routines can be invoked a routine is run which compares each transaction from one
+set of data with each transaction from the other set and reports on any discrepancies.
+<p>
+This discrepancy check routine was becoming slower and slower as the volume of data increased.
+<p>
+Essentially the code to perform the check was something along the line of
+<PRE CLASS="CE2">
+   select * from
+      (
+      select account#, value from TransactionSet1
+      minus
+      select account#, value from TransactionSet2
+      )
+   union all
+      (
+      select account#, value from TransactionSet2
+      minus
+      select account#, value from TransactionSet1
+      )
+</PRE>
+
+Operating on many millions of transactions this single statement incurred a massive cost and ran over a
+few hours. There was really very little tuning that you could possibly perform on a statement such as
+this.
+<p>
+The solution was to perform the checking during each transaction via an intermediate table. Whenever
+a transaction was entered into either of the TransactionSets, the trigger either inserted or updated
+a row in the intermediate table. The trigger on TransactionSet1 would add the value to the row and
+the trigger from TransactionSet2 would subtract the value from the row.
+<p>
+Both triggers would delete the row if the final result was a value of zero. The intermediate table never
+exceeded more than a few thousand rows as the two sets of data were being entered concurrently by two
+different offices.
+<p>
+The workload to perform the discrepancy check was moved from a single two hour process which checked
+millions of rows at once, to an extra few milliseconds on each transaction. As the transactions are
+being entered by human operators, the extra few milliseconds was never noticed.
+<p>
+At the end of each working day, prior to the closure routines, a simple check on the intermediate table
+ensured it was empty before proceeding.
+<p>
+</tr>
+
+
+
+<tr><b>THE WHERE NOT EXISTS</b><hr></tr>
+<tr>
+I often see code such as this
+<PRE CLASS="CE2">
+   SELECT f.CODE
+   FROM   FIRST_TABLE f
+   WHERE  NOT EXISTS (SELECT 1 FROM OTHER_TABLE o WHERE o.CODE = f.CODE);
+</PRE>
+
+Essentially it is looking for data in FIRST_TABLE which doesn't have corresponding data in the second.
+Oracle can sometimes optimise this into two selects with a MERGE JOIN but not always. Where it cannot
+be optimised, the second select will be executed via NESTED LOOPS for each row in the first table.
+<p>
+A simple solution is to outer join both tables to start with, and select from the result where
+the appropriate column from the second table is NULL. It involves a select from a select, you should
+compare the execution plans of both to see how it will affect performance in your situation.
+<p>
+<PRE CLASS="CE2">
+   SELECT FCODE
+   FROM   (
+          SELECT f.CODE AS FCODE,
+                 o.CODE AS OCODE
+          FROM   FIRST_TABLE f,
+                 OTHER_TABLE o
+          WHERE  o.CODE (+) = f.CODE
+          )
+   WHERE  OCODE IS NULL
+</PRE>
+It will very much depend on the actual tables as to whether you will see a performance increase or not.
+<p>
+</tr>
+</table>
+
+So two small examples of lateral thinking. One shows that you cannot always achieve what you want
+via SQL tuning, the other shows how a SQL statement might be tuned to offer vastly superior performance.
+<p>
+Do not become obsessed purely with your SQL statements, sure they should be tuned and optimised, but
+keep them in context of the entire operation or target which you want to achieve.
+<p>
+
+<p><FONT SIZE=3><b>Full table scans - large and small tables</b></FONT><p>
+I have mentioned it before, but it is always worth mentioning again. You should generally avoid full
+table scans where possible. However there are certain times when a full table scan is either unavoidable or will
+perform better than an index range scan or other access path.
+<p>
+Regardless of the size of the table if you wish to retrieve all of the rows and columns or a very large proportion of
+them, it is often quicker for Oracle to avoid using the indexes and read the entire table directly. It is simply
+because even if Oracle used it's indexes first, it will still end up having to read the entire table so it may as well
+avoid the additional overhead of access via the indexes.
+<p>
+There can be other situations where you require only one row from a table and a unique index
+exists on the column in your where condition. In this situation Oracle may also opt for a full table scan as it
+can be better for performance. This usually occurs with small tables (I haven't found a definition of a 'small' table yet).
+I offer the following example.
+
+<PRE CLASS="CE2">
+   -- Create our demo table
+   -- ============================================================================
+   CREATE TABLE SMALL
+      (
+      ID     NUMBER(3),
+      NAME   VARCHAR2(20)
+      );
+   CREATE INDEX SMALL_ID_IND ON SMALL ( ID );
+
+   -- Insert some data
+   -- ============================================================================
+   INSERT INTO SMALL (ID,NAME) VALUES (1,'One');
+   INSERT INTO SMALL (ID,NAME) VALUES (2,'Two');
+   INSERT INTO SMALL (ID,NAME) VALUES (3,'Three');
+   ANALYZE TABLE SMALL COMPUTE STATISTICS;
+   ANALYZE TABLE SMALL COMPUTE STATISTICS FOR ALL INDEXES;
+
+   -- Get cost based plan for a simple select
+   -- ============================================================================
+   EXPLAIN PLAN FOR
+   SELECT *
+   FROM   SMALL
+   WHERE  ID = 2;
+
+   @utlxpls.sql;
+
+   | Operation                 |  Name    |  Rows | Bytes|  Cost  | Pstart| Pstop |
+   --------------------------------------------------------------------------------
+   | SELECT STATEMENT          |          |     1 |    6 |      1 |       |       |
+   |  TABLE ACCESS FULL        |SMALL     |     1 |    6 |      1 |       |       |
+   --------------------------------------------------------------------------------
+
+   -- Get cost based plan for a simple select, but forcing use of an index
+   -- ============================================================================
+   EXPLAIN PLAN FOR
+   SELECT /*+ INDEX( SMALL, SMALL_ID_IND ) */ *
+   FROM   SMALL
+   WHERE  ID = 2;
+
+   @utlxpls.sql;
+
+   | Operation                 |  Name    |  Rows | Bytes|  Cost  | Pstart| Pstop |
+   --------------------------------------------------------------------------------
+   | SELECT STATEMENT          |          |     1 |    6 |      2 |       |       |
+   |  TABLE ACCESS BY INDEX ROW|SMALL     |     1 |    6 |      2 |       |       |
+   |   INDEX RANGE SCAN        |SMALL_ID_ |     1 |      |      1 |       |       |
+   --------------------------------------------------------------------------------
+
+   -- Get rule based plan for a simple select (just for completeness!)
+   -- ============================================================================
+   EXPLAIN PLAN FOR
+   SELECT /*+ RULE */ *
+   FROM   SMALL
+   WHERE  ID = 2;
+
+   @utlxpls.sql;
+
+   | Operation                 |  Name    |  Rows | Bytes|  Cost  | Pstart| Pstop |
+   --------------------------------------------------------------------------------
+   | SELECT STATEMENT          |          |       |      |        |       |       |
+   |  TABLE ACCESS BY INDEX ROW|SMALL     |       |      |        |       |       |
+   |   INDEX RANGE SCAN        |SMALL_ID_ |       |      |        |       |       |
+   --------------------------------------------------------------------------------
+</PRE>
+
+The first two plans show (using the cost based optimiser) how the statement would be executed with and
+without the index. Allowing Oracle to choose it's own access path, Oracle has correctly surmised that
+the quickest path is via a full table scan.
+<p>
+A simple explanation for this is that the table will occupy less that one data block on disk, as will
+the index. To use the index to access the data two data blocks have to be read whereas using a full
+table scan only one data block has to be read.
+<p>
+I have included the third plan just to show how the rule based optimiser approached the same statement.
+It was simply following its rule rank method, whereby an index range scan is ranked as more efficient
+than a table scan. In this case it was wrong.
+<p>
+Using the cost based optimiser, I have seen Oracle continuing to do full table scans on a table of up to
+50,000 rows which had a suitable index (with upto date statistics). Trying the statement with varying
+numbers of rows from 10, 1000, 5000 etc etc it was at approximately 50,000 that the index range scan
+became cheaper. Do not take these row counts as gospel! The point at which the index scan is cheaper
+depend on your instance, the actual table (width etc) and the database block size.
+<p>
+It would be interesting to run the same tests using TkProf to see what actually happened in comparison
+to what the execution plans were. I'll save that for a rainy day.
+
+
+<p><FONT SIZE=3><b>Sort and merge operations</b></FONT><p>
+When your explain plan shows SORT or MERGE JOIN operations etc, these will usually be performed in
+memory. I have read that a well tuned instance should be CPU bound as opposed to Disk bound (meaning
+that the CPU would be running full throttle while the Disks stay relatively idle).
+<p>
+While this is usually true, do not assume that because your plan is showing SORT or MERGE/HASH JOIN etc
+that it is well tuned. If your statement requires that Oracle MERGE or SORT 12Gb of data, it is usually not going
+to manage it in memory. It would in essence begin using temporary tablespace to achieve the sort. All
+you've actually managed to do in this case, is have Oracle work on your data back on disk. First it
+would read the datablocks, do some processing and then write the data blocks to temporary tablespace
+before processing them again, finally re-reading the data blocks from temporary tablespace in order to
+get you a result. That is incredibly inefficient.
+<p>
+Do not panic at the thought of the in memory JOINS/FILTERS/MERGE etc. They almost certainly have to
+exist as it is impossible and also inefficient to create indexes for every possible join etc. But keep
+an eye on the numbers - if Oracle is having to perform in memory operations on large volumes of data, not
+only will your statement be slow, but so will every other users statements as Oracle flushes it's caches
+to obtain every last byte of memory available.
+<p>
+
+
+
+<p><FONT SIZE=3><b>Overriding the optimiser mode (hints)</b></FONT><p>
+There are times when you know that there is a better access path to data than either the cost based or
+rule based optimisers can achieve.
+<p>
+In the third statement and plan issued above and in an environment where the rule based optimiser is the
+default with no statistics on the table, we can force the optimiser to perform a full table scan even
+though the rule ranks suggests otherwise.
+<PRE CLASS="CE2">
+   SELECT /*+ FULL */ *
+   FROM   SMALL
+   WHERE  ID = 2;
+
+   @utlxpls.sql;
+
+   | Operation                 |  Name    |  Rows | Bytes|  Cost  | Pstart| Pstop |
+   --------------------------------------------------------------------------------
+   | SELECT STATEMENT          |          |     1 |    6 |      1 |       |       |
+   |  TABLE ACCESS FULL        |SMALL     |     1 |    6 |      1 |       |       |
+   --------------------------------------------------------------------------------
+</PRE>
+
+The FULL hint specifies that we want Oracle to perform a full table scan. A hint can be applied
+to SELECT, INSERT, UPDATE and DELETE statements. They are specified by placing the hint immediately
+after the SELECT, INSERT, UPDATE or DELETE statement in a comment. The comment must have a + (plus) sign
+immediately following the open comment indicator.
+<p>
+For example....
+<PRE CLASS="CE2">
+   SELECT /*+ FULL */ *
+   SELECT /*+ ORDERED */ *
+   SELECT --+ INDEX( .. )
+   INSERT /*+ INDEX( .. ) *.
+</PRE>
+
+The comment style used can either be the '--' or the '/* */'.
+<p>
+You can specify hints which force the access path (ie how a table is accessed), hints to force the
+execution order of the statement (join order etc) and hints to change the optimiser goal (all rows,
+first_row).
+<p>
+There are many different forms and types of hint, you can also combine multiple hints into one statement.
+The actual syntax and purpose of each hint is too long to go into here, and would simply be a reproduction
+of those already contained in the Oracle documentation.
+<p>
+
+
+
+<a href="index.html" title="Back to main contents page">Back to Contents</a>
+
+</HTML>

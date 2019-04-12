@@ -1,0 +1,281 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  An introduction to SQL statement tuning
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>AN INTRODUCTION TO ORACLE SQL STATEMENT TUNING</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 21st Feb 2003 </FONT><br>
+<hr>
+
+<p>
+  <FONT SIZE=4> <b>IDENTIFYING EXISTING STATEMENTS</b></FONT><br>
+<p>
+We've covered how to go about tuning the statements you are currently developing, but what about those
+statements probably buried deep inside some PL/SQL packages which are already in place? The DBA's will
+monitor the instance for performance and tune the instance itself but what about all that existing code?
+<p>
+Some DBA's will occassionally look at the code that is currently running on their instances, either out
+of curiosity (some say it's devil like desire to come and slap us developers about a bit!). They may also
+notice a sudden increase in workload on an instance and start investigating the cause. If you receive
+a call from a DBA enquiring about what you are currently running, don't take it as an insult or get
+offended. Think of it as no different to when a doctor asks you "where does it hurt".
+<p>
+If a DBA has identified a performance issue, and the code causing it, use the opportunity to glean as
+much information from them as possible. Good DBA's are a mine of information, useful tips and solutions
+to common problems. Most good DBA's also do not mind an inquisitive developer. Our goals are almost
+identical and we're all working and relying on the same server.
+<p>
+If you do receive that call, set about identifying and solving the problem (hopefully with the help of
+the DBA). If you don't receive that call and you're sitting back waiting for that statement to complete
+(you know the one, we all have one, it usually reads 400Gb of data, sorts it in memory, performs a union
+all across multiple million row tables and then returns the system date - meanwhile giving you an
+opportunity to read the paper - but I digress). While you're waiting for it to complete, you can if you
+wish take the opportunity to look at other code which is executing on the instance.
+<p>
+Oracle supplies lots of views from which you can gather information. Some views require that you be
+granted the rights to select from them, if you're on a development instance the DBA's will usually have
+no problem with granting you the rights. On production instances however, there could be confidential
+information scattered about within the views and they may be unwilling to grant the required
+privileges.
+
+
+
+<p><FONT SIZE=3><b>Useful values</b></FONT><p>
+We'll start with some simple values that will come in usefull further on.
+<p>
+
+<table width=85% align=center border=0>
+
+<tr><b>DATABASE BLOCK SIZE</b><hr></tr>
+<tr>
+The database block size will come in useful later when you're trying to determine the amount of data
+read by any statement. It helps you to translate some of Oracle's numbers into actual real world
+information.
+<PRE CLASS="CE2">
+   select value
+   from   v$parameter
+   where  name = 'db_block_size';
+</PRE>
+This returns the database block size in bytes (not Kilobytes or Megabytes)
+<p>
+</tr>
+
+
+<tr><b>OPTIMISER MODE</b><hr></tr>
+<tr>
+The default optimiser mode for your instance
+<PRE CLASS="CE2">
+   select value
+   from   v$parameter
+   where  name = 'optimizer_mode';
+</PRE>
+<p>
+</tr>
+</table>
+
+
+
+
+<p><FONT SIZE=3><b>Useful performance views</b></FONT><p>
+
+Oracle also has a very comprehensive set of performance views, useful ones for a developer are
+as follows...
+<p>
+<table width=85% align=center border=0>
+
+<tr><b>V$SESSION</b><hr></tr>
+<tr>
+Lists all sessions currently active on the instance. Values you will find useful are
+<PRE CLASS="CE2">
+   SID            The session ID. Many other views refer to this
+   USER#          The user number. Again, other views may refer to this
+   USERNAME       The oracle user name of the connected session (schema name)
+   OSUSER         The operating system user name of the connected session
+   TERMINAL       The machine name of the connected user
+   PROGRAM        The name of the program which connected the session (SqlPlus, TOAD etc)
+   SQL_HASH_VALUE A value which identifies the statement currently being executed
+   LAST_CALL_ET   An Approximate count of the number of seconds since the current statement started
+</PRE>
+Use the V$SESSION table to identify your own session - or to identify the session which is executing
+other statements.
+<p>
+</tr>
+
+
+
+<tr><b>V$SESSTAT and V$MYSTAT</b><hr></tr>
+<tr>
+Lists statistics for all connected sessions. You will need to join the SID column from V$SESSION to know
+which statistics belong to which actual user. It is also useful to join the STATISTIC# column to V$STATNAME
+to get useful names of the statistics.
+
+<PRE CLASS="CE2">
+   SID            The session ID to which the statistic applies
+   STATISTIC#     The statistic ID (see V$STATNAME)
+   VALUE          The value for the statistic and session.
+</PRE>
+There is also a variant of V$SESSTAT which lists only the statistics for your current session. V$MYSTAT
+is a useful shortcut to obtaining your SID and applying it to V$SESSTAT.
+<p>
+</tr>
+
+
+<tr><b>V$SQLAREA and V$SQLTEXT</b><hr></tr>
+<tr>
+V$SQLAREA contains a single row for each SQL statement which is currently in the shared SQL area.
+It shows it's parse count, execution count and statistics for it. The statistics are cumulative, ie
+they show total values for all executions of the statement - not statistics per execution. The SQL_TEXT
+column of this view is limited to the first 1000 characters. To obtain the full text you need to join
+this view using the HASH_VALUE column to the V$SQLTEXT or V$SQLTEXT_WITH_NEWLINES view.
+<p>
+Some useful columns in this view
+<PRE CLASS="CE2">
+   SQL_TEXT        The first 1000 characters of the statement
+   EXECUTIONS      How many times the statement has been executed
+   FIRST_LOAD_TIME When the statement was first loaded into the SQL area
+   PARSE_CALLS     How many times Oracle has had to re-parse the statement
+   DISK_READS      Cumulative total of disk blocks read for this statement
+   BUFFER_GETS     Cumulative total of memory blocks read for this statement
+   ROWS_PROCESSED  Cumulative total of rows processed by this statement
+   HASH_VALUE      A hash value for the statement which is guaranteed to be unique
+</PRE>
+This view is useful in identifying resource intensive SQL which has been executed on the instance. It
+can also identify poorly constructed SQL which requires frequent re-parsing or is unsharable.
+<p>
+</tr>
+
+</table>
+
+
+
+
+<p><FONT SIZE=3><b>Useful statements</b></FONT><p>
+<table width=85% align=center border=0>
+
+<tr><b>RESOURCE INTENSIVE STATEMENTS</b><hr></tr>
+<tr>
+List each statement in the Sql area by a simple measure of the resources consumed. Because
+a statement can be executed numerous times, we list both the disk reads and buffer gets separately
+and also added together. On first execution it is likely that disk reads will be higher, but on
+subsequent executions the buffer gets will be higher as Oracle can probably satisfy the request from
+cache.
+<PRE CLASS="CE2">
+   select sql_text,
+          executions,
+          to_char((((disk_reads+buffer_gets)/executions) * 8192)/1048576,
+                     '9,999,999,990.00')  as total_gets_per_exec_mb,
+          to_char((( disk_reads             /executions) * 8192)/1048576,
+                     '9,999,999,990.00')  as disk_reads_per_exec_mb,
+          to_char((( buffer_gets            /executions) * 8192)/1048576,
+                     '9,999,999,990.00')  as buffer_gets_per_exec_mb,
+          parsing_user_id
+   from   v$sqlarea
+   where  executions > 0
+   order by 6 desc
+</PRE>
+An explanation of some of the constants in the SQL.
+<PRE CLASS="CE2">
+   8192      Is the database block size on my instance. Change this to suit your own instance.
+   1048576   Bytes per megabyte to allow the result to be shown in megs rather than bytes.
+</PRE>
+You should change the 8192 to reflect your actual database block size, and if you prefer your results
+in Kb rather than Mb change the 1048576 to 1024. If you are lucky, and the user who first executed
+the statement is still connected, you can find the user via the parsing_user_id column against the
+USER# column in V$SESSION.
+<p>
+</tr>
+
+
+<tr><b>PARSE TO EXECUTION RATIO</b><hr></tr>
+<tr>
+Each time a statement is executed, Oracle parses the statement for a number of reasons.
+   <ul>
+   <li>Does an execution plan already exist for this statement?</li>
+   <li>Can data in cache (or already open cursors) be used to satisfy the request?</li>
+   </ul>
+
+Oracle does this by creating a hash value for the SQL statement and looking in its SQL cache. If
+an <u>identical</u> statement can be found then the already generated execution plan may be able to be used. I say
+may because operations since that statement were executed may force Oracle to re plan the statement.
+Oracle also looks to see if data (actual row data) in cache or cursors already opened on that data
+can be used to satisfy the request. There are many factors which dictate the re-useability of the SQL
+or the data, but the first and foremost is the statement itself.
+<p>
+The key word is identical. The following two statements are not identical.
+<PRE CLASS="CE2">
+   select * from fred where id = 2;
+   select * from fred where id = 3;
+</PRE>
+whereas
+<PRE CLASS="CE2">
+   select * from fred where id = :inID;
+   select * from fred where id = :inID;
+</PRE>
+are identical. The second statement using a bind variable is identical regardless of the value of the
+bind variable (the datatype must be the same though). The second statement would be parsed once and
+executed many times without having to be re-parsed. You should use bind variables whereever possible
+in your SQL and in your cursors.
+<p>
+To determine the parse to execution ratio of the SQL statements we can use
+<PRE CLASS="CE2">
+   select sql_text,
+          (100/executions)*parse_calls parse_ratio,
+          parse_calls,
+          executions,
+          parsing_user_id
+   from   v$sqlarea
+   where  parse_calls > 1 and executions > 0
+</PRE>
+This statement excludes any statement which have been parsed just the once. Very poor SQL will show a
+parse count of 1 and an execution count of 1, but there will be many subtely different copies of the
+SQL in V$SQLAREA. Finding these can be a bit of a pain, as you have to manually separate them from SQL
+which truly has only been executed once.
+<p>
+A lower parse ratio is the target for each statement. A parse ratio of 100 means that while the
+statement is theoretically identical, it is probably not using bind variables and so has to be
+re-parsed and checked each time.
+<p>
+The real intricacies of how Oracle manages when and when not to re-parse are quite involved. Refer to
+your Oracle documentation for a fuller explanation.
+</tr>
+
+</table>
+
+These two statements should help you to identify poorly performing SQL, and poorly constructed SQL.
+There are many more statements and scripts out there, a simple search on Google for 'Oracle Tuning' will
+usually return Database Tuning examples, but there are also plenty of SQL & Developer tuning documents.
+<p>
+I leave it as an exercise for you to consider how you might use V$MYSTAT to show actual statistics
+between any two points in time for your session (ie before and after executing a statement). There
+is no reason why you could not create a couple of scripts possibly called STATSNAP.SQL and STATREPORT.SQL.
+The first script would store the cumulative statistics for your session at the current time, and the
+second would report the difference.
+<p>
+You could then compare proposed plans from Oracle with actual statistics and resource use after
+execution.
+<p>
+
+
+<p><FONT SIZE=3><b>Which schema or instance should I be tuning</b></FONT><p>
+Finally, don't get too carried away tuning DEV - many developers are going to be running and tuning many
+statements of their own. I wouldn't recommend you start shouting about what you find in V$SQLAREA on
+a development instance. It is without doubt useful, but many of those statements are unlikely to make
+their way into the real world. You will also find many statements generated by developer tools. TOAD
+for instance does so many background selects that you can't see the wood for the trees. Filter them
+out of your V$SQLAREA view based on the MODULE column or MODULE_HASH column.
+<p>
+
+
+
+
+
+
+
+<a href="index.html" title="Back to main contents page">Back to Contents</a>
+
+</HTML>

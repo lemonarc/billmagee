@@ -1,0 +1,642 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  Oracle Sudoku Solver
+	</title>
+  </HEAD>
+
+<body>
+
+<table width=70% align="middle" ><tr><td>
+
+<hr>
+  <FONT SIZE=4> <b>ORACLE SUDOKU SOLVER</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 20th April 2006 </FONT><br>
+<hr>
+<p>
+
+Like many others I've recently been getting somewhat carried away with the craze for Sudoku puzzles. 
+<a href="http://www.tonyandrews.blogspot.com" title="Link to Tony Andrews' blog"> Tony Andrews</a> wrote an
+Oracle Sudoku Solver which got me interested in seeing if I could expand on his version.
+<p>
+
+<h3>What is Sudoku</h3>
+Sudoku is a number puzzle with a few quite simple rules. You start with a 9x9 grid, subdivided into 9 smaller 3x3 grids. Some cells will already contain
+a number from 1 to 9. Your task is to fill in the empty cells so that....
+<ul>
+   <li>Each column and row contains each of the numbers from 1 to 9</li>
+   <li>Each 3x3 grid also contains each of the numbers from 1 to 9</li>
+</ul>
+An important principle of Sudoku is that each puzzle should only have one solution and that it should always be solvable through logic and deduction 
+without any need for guessing.
+
+<table border=1 align="middle" cellpadding=10 cellspacing=0 rows=9 cols=9 cell>
+   
+   <tr><td bgcolor="white">&nbsp</td><td bgcolor="white">9</td><td bgcolor="white">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">1</td><td bgcolor="white">5</td><td bgcolor="white">&nbsp</td><tr>
+   <tr><td bgcolor="white">4</td><td bgcolor="white">2</td><td bgcolor="white">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">8</td><tr>
+   <tr><td bgcolor="white">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">1</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">9</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">2</td><tr>
+   <tr><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">5</td><td bgcolor="white">&nbsp</td><td bgcolor="white">6</td><td bgcolor="white">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">9</td><td bgcolor="yellow">&nbsp</td><tr>
+   <tr><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">8</td><td bgcolor="white">&nbsp</td><td bgcolor="white">5</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><tr>
+   <tr><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">7</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">3</td><td bgcolor="white">&nbsp</td><td bgcolor="yellow">5</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><tr>
+   <tr><td bgcolor="white">6</td><td bgcolor="white">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">2</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">3</td><td bgcolor="white">&nbsp</td><td bgcolor="white">&nbsp</td><tr>
+   <tr><td bgcolor="white">3</td><td bgcolor="white">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">6</td><td bgcolor="white">4</td><tr>
+   <tr><td bgcolor="white">&nbsp</td><td bgcolor="white">5</td><td bgcolor="white">2</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="yellow">&nbsp</td><td bgcolor="white">&nbsp</td><td bgcolor="white">1</td><td bgcolor="white">&nbsp</td><tr>
+</table>
+
+
+<h3>The Code</h3>
+Create a simple table for processing...<p></td></tr>
+
+<tr><td bgcolor="silver">
+<b><PRE CLASS="CE2">
+   create table sudoku (
+      x    number(1),
+      y    number(1),
+      xg   number(1),
+      yg   number(1),
+      z    varchar2(9)
+      );
+</PRE></b></tr></td>
+
+<tr><td>Create a simple trigger to populate the subgrid x,y values...</td></tr>
+
+
+<tr><td bgcolor="silver">
+<b><PRE CLASS="CE2">
+   create or replace trigger sudoku_xyg_trg 
+   before insert on sudoku
+   for each row
+   begin
+      :new.xg := floor((:new.x-1)/3);
+      :new.yg := floor((:new.y-1)/3);
+   end;
+</PRE></b></tr></td>
+
+
+<tr><td>The following view lays up the table into a readable sudoku grid...</td></tr>
+
+
+<tr><td bgcolor="silver">
+<b><PRE CLASS="CE2">
+   create or replace view sudoku_layup as
+      select c1.y, 
+             c1.z as c1, 
+             c2.z as c2,
+             c3.z as c3,
+             c4.z as c4,
+             c5.z as c5,
+             c6.z as c6,
+             c7.z as c7,
+             c8.z as c8,
+             c9.z as c9
+      from   sudoku c1,
+             sudoku c2,
+             sudoku c3,
+             sudoku c4,
+             sudoku c5,
+             sudoku c6,
+             sudoku c7,
+             sudoku c8,
+             sudoku c9
+      where  c1.x = 1 and
+             c2.x = 2 and
+             c3.x = 3 and
+             c4.x = 4 and
+             c5.x = 5 and
+             c6.x = 6 and
+             c7.x = 7 and
+             c8.x = 8 and
+             c9.x = 9 and
+             c2.y = c1.y and
+             c3.y = c1.y and
+             c4.y = c1.y and
+             c5.y = c1.y and
+             c6.y = c1.y and
+             c7.y = c1.y and
+             c8.y = c1.y and
+             c9.y = c1.y 
+      order by c1.y;
+</PRE></b></tr></td>
+
+
+<tr><td>And finally the actual code (note the comments/annotation are in gray)...</td></tr>
+
+
+<tr><td bgcolor="silver">
+<b><PRE CLASS="CE2">
+   CREATE OR REPLACE package sudoku_pkg as
+     procedure Solve(inRow1 in varchar2,
+                     inRow2 in varchar2,
+                     inRow3 in varchar2,
+                     inRow4 in varchar2,
+                     inRow5 in varchar2,
+                     inRow6 in varchar2,
+                     inRow7 in varchar2,
+                     inRow8 in varchar2,
+                     inRow9 in varchar2
+                     );
+                     
+     function  each_of_sub_in( insub in varchar2, inmain in varchar2) return binary_integer;
+     PRAGMA RESTRICT_REFERENCES( each_of_sub_in, RNDS, WNDS, WNPS );
+   end;
+   /
+   CREATE OR REPLACE package body sudoku_pkg as
+   
+   procedure Populate( inRow1 in varchar2,
+                       inRow2 in varchar2,
+                       inRow3 in varchar2,
+                       inRow4 in varchar2,
+                       inRow5 in varchar2,
+                       inRow6 in varchar2,
+                       inRow7 in varchar2,
+                       inRow8 in varchar2,
+                       inRow9 in varchar2
+                       ) is
+   begin
+      delete from sudoku;
+      for i in 1..9 loop
+         insert into sudoku(x,y,z) values (i,1,trim(substr(inrow1,i,1))); 
+         insert into sudoku(x,y,z) values (i,2,trim(substr(inrow2,i,1))); 
+         insert into sudoku(x,y,z) values (i,3,trim(substr(inrow3,i,1))); 
+         insert into sudoku(x,y,z) values (i,4,trim(substr(inrow4,i,1))); 
+         insert into sudoku(x,y,z) values (i,5,trim(substr(inrow5,i,1))); 
+         insert into sudoku(x,y,z) values (i,6,trim(substr(inrow6,i,1))); 
+         insert into sudoku(x,y,z) values (i,7,trim(substr(inrow7,i,1))); 
+         insert into sudoku(x,y,z) values (i,8,trim(substr(inrow8,i,1))); 
+         insert into sudoku(x,y,z) values (i,9,trim(substr(inrow9,i,1))); 
+      end loop;
+      update sudoku set z = '123456789' where z = '.';
+   end Populate;                     
+   
+   function  each_of_sub_in( insub in varchar2, inmain in varchar2) return binary_integer is
+      result binary_integer;
+   begin
+      result := 1;
+      for i in 1..length( insub ) loop
+         if instr( inmain, substr(insub,i,1) ) = 0 then
+            result := 0;
+         end if;
+      end loop;
+      return result;
+   end;
+   
+   function EliminateSinglesInRow return binary_integer is
+      Result binary_integer default 0;
+   begin
+      for rec in (select x,y,z from sudoku where length(z) = 1) loop
+         update sudoku
+         set    z = replace(z,rec.z,'')
+         where  y  = rec.y and
+                x <> rec.x and
+                length(z) <> 1 and
+                z like '%'||rec.z||'%';             
+         result := result + sql%rowcount; 
+      end loop;
+   
+      for iz in 1..9 loop
+         for rec in (
+                    select y
+                    from   sudoku
+                    where  z like '%'||iz||'%' 
+                    group  by y
+                    having count(*) = 1
+                    ) loop
+            update sudoku
+            set    z = iz
+            where  y = rec.y and
+                   z like '%'||iz||'%' and
+                   length(z) <> 1;
+            result := result + sql%rowcount;
+         end loop;
+      end loop;       
+         
+      return result;
+   end;   
+   
+   
+   function EliminateSinglesInCol return binary_integer is
+      Result binary_integer default 0;
+   begin
+      for rec in (select x,y,z from sudoku where length(z) = 1) loop
+         update sudoku
+         set    z = replace(z,rec.z,'')
+         where  y <> rec.y and
+                x =  rec.x and
+                length(z) <> 1 and
+                each_of_sub_in( rec.z, z ) = 1;
+         result := result + sql%rowcount; 
+      end loop;
+      
+      for iz in 1..9 loop
+         for rec in (
+                    select x
+                    from   sudoku
+                    where  z like '%'||iz||'%' 
+                    group  by x
+                    having count(*) = 1
+                    ) loop
+            update sudoku
+            set    z = iz
+            where  x = rec.x and
+                   z like '%'||iz||'%' and 
+                   length(z) <> 1;
+            result := result + sql%rowcount;
+         end loop;
+      end loop;       
+   
+      return result;
+   end;   
+   
+   function EliminateSinglesInGroup return binary_integer is
+      Result binary_integer default 0;
+   begin
+      for rec in (select x,y,xg,yg,z from sudoku where length(z) = 1) loop
+         update sudoku
+         set    z = replace(z,rec.z,'')
+         where  y <> rec.y and
+                x <> rec.x and
+                xg = rec.xg and
+                yg = rec.yg and
+                length(z) > 1 and
+                z like '%'||rec.z||'%';
+         result := result + sql%rowcount; 
+      end loop;
+   
+      for iz in 1..9 loop
+         for rec in (
+                    select xg,yg
+                    from   sudoku
+                    where  z like '%'||iz||'%'
+                    group  by xg,yg
+                    having count(*) = 1
+                    ) loop
+            update sudoku
+            set    z = iz
+            where  xg = rec.xg and
+                   yg = rec.yg and
+                   z like '%'||iz||'%' and
+                   length(z) <> 1;
+            result := result + sql%rowcount;
+         end loop;
+      end loop;       
+   
+      return result;
+   end;
+   
+   function EliminateByPairsInRow return binary_integer is
+      result binary_integer default 0;
+   begin
+      for rec in (
+                 select y,z 
+                 from   sudoku
+                 where  length(z) = 2
+                 group  by y,z
+                 having count(*) = 2
+                 ) loop
+         for i in 1..length( rec.z ) loop
+            update sudoku
+            set    z = replace(z,substr(rec.z,i,1),'')
+            where  y = rec.y and
+                   z <> rec.z and
+                   z like '%'||substr(rec.z,i,1)||'%' and
+                   length(z) > 1;
+            result := result + sql%rowcount; 
+         end loop;
+      end loop;
+   
+      return result;
+   end;     
+   
+   function EliminateByPairsInCol return binary_integer is
+      result binary_integer default 0;
+   begin
+      for rec in (
+                 select x,z 
+                 from   sudoku
+                 where  length(z) = 2 
+                 group  by x,z
+                 having count(*) = 2
+                 ) loop
+         for i in 1..length( rec.z ) loop
+            update sudoku
+            set    z = replace(z,substr(rec.z,i,1),'')
+            where  x = rec.x and
+                   z <> rec.z and
+                   z like '%'||substr(rec.z,i,1)||'%' and
+                   length(z) > 1;
+            result := result + sql%rowcount; 
+         end loop;
+      end loop;
+   
+      return result;
+   end;     
+   
+   function EliminateByPairsInGroup return binary_integer is
+      result binary_integer default 0;
+   begin
+      for rec in (
+                 select xg, yg, z
+                 from   sudoku
+                 where  length(z) = 2 
+                 group  by xg,yg,z
+                 having count(*) = 2
+                 ) loop
+         for i in 1..length( rec.z ) loop
+            update sudoku
+            set    z = replace(z,substr(rec.z,i,1),'')
+            where  xg = rec.xg and
+                   yg = rec.yg and                 
+                   z <> rec.z and
+                   z like '%'||substr(rec.z,i,1)||'%' and
+                   length(z) > 1;
+         end loop;
+         result := result + sql%rowcount;
+      end loop;
+   
+      return result;
+   end;     
+   
+   function EliminateTripletsInRow return binary_integer is
+      result binary_integer default 0;
+   begin
+      for rec in (
+                 select x,y,z
+                 from   sudoku
+                 where  length(z) = 3 
+                 ) loop
+         for subrec in (
+                       select count(*) as pvals 
+                       from   sudoku
+                       where  x <> rec.x and
+                              y  = rec.y and
+                              each_of_sub_in( z, rec.z ) = 1
+                       ) loop
+            if subrec.pvals = 2 then
+               for i in 1..length( rec.z ) loop  
+                  update sudoku
+                  set    z = replace( z,substr(rec.z,i,1),'') 
+                  where  x <> rec.x and
+                         y = rec.y and 
+                         z like '%'||substr(rec.z,i,1)||'%' and 
+                         each_of_sub_in( z,rec.z ) = 0 and
+                         length(z) > 1; 
+                  result := result+sql%rowcount;               
+               end loop;
+            end if;
+         end loop;
+      end loop;
+   
+      return result;
+   end;   
+   
+   function EliminateTripletsInCol return binary_integer is
+      result binary_integer default 0;
+   begin
+      for rec in (
+                 select x,y,z
+                 from   sudoku
+                 where  length(z) = 3 
+                 ) loop
+         for subrec in (
+                       select count(*) as pvals 
+                       from   sudoku
+                       where  y <> rec.y and
+                              x  = rec.x and
+                              each_of_sub_in( z, rec.z ) = 1
+                       ) loop
+            if subrec.pvals = 2 then
+               for i in 1..length( rec.z ) loop  
+                  update sudoku
+                  set    z = replace( z,substr(rec.z,i,1),'') 
+                  where  y <> rec.y and
+                         x = rec.x and 
+                         z like '%'||substr(rec.z,i,1)||'%' and 
+                         each_of_sub_in( z,rec.z ) = 0 and
+                         length(z) > 1; 
+                  result := result+sql%rowcount;               
+               end loop;
+            end if;
+         end loop;
+      end loop;
+   
+      return result;
+   end;   
+   
+   function EliminateTripletsInGroup return binary_integer is
+      result binary_integer default 0;
+   begin
+      for rec in (
+                 select xg,yg,x,y,z
+                 from   sudoku 
+                 where  length(z) = 3 
+                 ) loop
+         for subrec in (
+                       select count(*) as pvals 
+                       from   sudoku
+                       where  (not (y = rec.y and x = rec.x)) and
+                              xg = rec.xg and
+                              yg = rec.yg and
+                              each_of_sub_in( z, rec.z ) = 1
+                       ) loop
+            if subrec.pvals = 2 then
+               for i in 1..length( rec.z ) loop  
+                  update sudoku
+                  set    z = replace( z,substr(rec.z,i,1),'') 
+                  where  y <> rec.y and
+                         x <> rec.x and
+                         xg = rec.xg and
+                         yg = rec.yg and 
+                         z like '%'||substr(rec.z,i,1)||'%' and 
+                         each_of_sub_in( z,rec.z ) = 0 and
+                         length(z) > 1; 
+                  result := result+sql%rowcount;               
+               end loop;
+            end if;
+         end loop;
+      end loop;
+   
+      return result;
+   end;   
+   
+   function EliminateExtendibleInRow return binary_integer is
+      result binary_integer default 0;
+      iy     binary_integer;
+   begin
+      for iz in 1..9 loop
+         for rec in (
+                     select xg,yg
+                     from   (
+                            select xg,yg,y
+                            from   sudoku
+                            where  z like '%'||iz||'%' 
+                            group  by xg,yg,y
+                            )
+                     group by xg,yg
+                     having count(*) = 1
+                     ) loop
+            select y
+            into   iy
+            from   sudoku
+            where  xg = rec.xg and 
+                   yg = rec.yg and
+                   z like '%'||iz||'%' 
+            group  by y;
+   
+            update sudoku
+            set    z = replace(z,iz,'') 
+            where  (not (xg = rec.xg and yg = rec.yg)) and
+                   y  = iy and
+                   z like '%'||iz||'%' and
+                   length( z ) > 1;
+            result := result + sql%rowcount;
+         end loop;
+      end loop;
+                  
+      return result;
+   end;   
+   
+   function EliminateExtendibleInCol return binary_integer is
+      result binary_integer default 0;
+      ix     binary_integer;
+   begin
+      for iz in 1..9 loop
+         for rec in (
+                     select xg,yg
+                     from   (
+                            select xg,yg,x
+                            from   sudoku
+                            where  z like '%'||iz||'%'                                 
+                            group  by xg,yg,x
+                            )
+                     group by xg,yg
+                     having count(*) = 1
+                     ) loop
+            select x
+            into   ix
+            from   sudoku
+            where  xg = rec.xg and 
+                   yg = rec.yg and
+                   z like '%'||iz||'%' 
+            group  by x;
+   
+            update sudoku
+            set    z = replace(z,iz,'') 
+            where  (not (xg = rec.xg and yg = rec.yg)) and
+                   x  = ix and
+                   z like '%'||iz||'%' and
+                   length( z ) > 1;
+            result := result + sql%rowcount;
+         end loop;
+      end loop;
+                  
+      return result;
+   end;   
+   
+   procedure solve(inRow1 in varchar2,
+                   inRow2 in varchar2,
+                   inRow3 in varchar2,
+                   inRow4 in varchar2,
+                   inRow5 in varchar2,
+                   inRow6 in varchar2,
+                   inRow7 in varchar2,
+                   inRow8 in varchar2,
+                   inRow9 in varchar2
+                   )
+   is
+      nTotalDone binary_integer;
+   begin
+      Populate( inRow1, inRow2, inRow3, inRow4, inRow5, inRow6, inRow7, inRow8, inRow9 );
+      
+      loop
+         nTotalDone := 0;
+         
+         nTotalDone := nTotalDone + EliminateSinglesInRow;
+         nTotalDone := nTotalDone + EliminateSinglesInCol;    
+         nTotalDone := nTotalDone + EliminateSinglesInGroup;  
+         nTotalDone := nTotalDone + EliminateByPairsInRow;    
+         nTotalDone := nTotalDone + EliminateByPairsInCol;    
+         nTotalDone := nTotalDone + EliminateByPairsInGroup;  
+         nTotalDone := nTotalDone + EliminateTripletsinRow;   
+         nTotalDone := nTotalDone + EliminateTripletsinCol;   
+         nTotalDone := nTotalDone + EliminateTripletsinGroup; 
+         nTotalDone := nTotalDone + EliminateExtendibleInRow; 
+         nTotalDone := nTotalDone + EliminateExtendibleInCol; 
+        
+         exit when nTotalDone = 0;
+      end loop;      
+   end solve;
+    
+   end;
+   /
+</PRE></b></tr></td>
+
+<p>
+
+<tr><td>
+<h3>The Result</h3>
+Given the puzzle we started with above, result is as follows....</td></tr>
+
+<tr><td bgcolor="silver">
+<b><PRE CLASS="CE2">
+   begin
+      Sudoku_Pkg.Solve('.9....15.',
+                       '42......8',
+                       '..1.9...2',
+                       '..5.6..9.',
+                       '...8.5...',
+                       '.7..3.5..',
+                       '6...2.3..',
+                       '3......64',
+                       '.52....1.');
+   end;
+
+   select c1,c2,c3,c4,c5,c6,c7,c8,c9 from sudoku_layup order by y
+   
+   C1 C2 C3 C4 C5 C6 C7 C8 C9
+   == == == == == == == == ==    
+    8  9  3  2  7  4  1  5  6
+    4  2  7  1  5  6  9  3  8
+    5  6  1  3  9  8  7  4  2
+    1  8  5  7  6  2  4  9  3
+    9  3  4  8  1  5  6  2  7
+    2  7  6  4  3  9  5  8  1
+    6  4  8  9  2  1  3  7  5
+    3  1  9  5  8  7  2  6  4
+    7  5  2  6  4  3  8  1  9   
+</PRE></b></tr></td>
+
+<tr><td><h3>The HTML formatted result</h3></td></tr>
+
+<tr><td>
+  <table border=1 align="middle" cellpadding=10 cellspacing=0 rows=9 cols=9 cell>
+  <tr><td bgcolor="white">8</td><td bgcolor="white">9</td><td bgcolor="white">3</td><td bgcolor="yellow">2</td><td bgcolor="yellow">7</td><td bgcolor="yellow">4</td><td bgcolor="white">1</td><td bgcolor="white">5</td><td bgcolor="white">6</td><tr>
+  <tr><td bgcolor="white">4</td><td bgcolor="white">2</td><td bgcolor="white">7</td><td bgcolor="yellow">1</td><td bgcolor="yellow">5</td><td bgcolor="yellow">6</td><td bgcolor="white">9</td><td bgcolor="white">3</td><td bgcolor="white">8</td><tr>
+  <tr><td bgcolor="white">5</td><td bgcolor="white">6</td><td bgcolor="white">1</td><td bgcolor="yellow">3</td><td bgcolor="yellow">9</td><td bgcolor="yellow">8</td><td bgcolor="white">7</td><td bgcolor="white">4</td><td bgcolor="white">2</td><tr>
+  <tr><td bgcolor="yellow">1</td><td bgcolor="yellow">8</td><td bgcolor="yellow">5</td><td bgcolor="white">7</td><td bgcolor="white">6</td><td bgcolor="white">2</td><td bgcolor="yellow">4</td><td bgcolor="yellow">9</td><td bgcolor="yellow">3</td><tr>
+  <tr><td bgcolor="yellow">9</td><td bgcolor="yellow">3</td><td bgcolor="yellow">4</td><td bgcolor="white">8</td><td bgcolor="white">1</td><td bgcolor="white">5</td><td bgcolor="yellow">6</td><td bgcolor="yellow">2</td><td bgcolor="yellow">7</td><tr>
+  <tr><td bgcolor="yellow">2</td><td bgcolor="yellow">7</td><td bgcolor="yellow">6</td><td bgcolor="white">4</td><td bgcolor="white">3</td><td bgcolor="white">9</td><td bgcolor="yellow">5</td><td bgcolor="yellow">8</td><td bgcolor="yellow">1</td><tr>
+  <tr><td bgcolor="white">6</td><td bgcolor="white">4</td><td bgcolor="white">8</td><td bgcolor="yellow">9</td><td bgcolor="yellow">2</td><td bgcolor="yellow">1</td><td bgcolor="white">3</td><td bgcolor="white">7</td><td bgcolor="white">5</td><tr>
+  <tr><td bgcolor="white">3</td><td bgcolor="white">1</td><td bgcolor="white">9</td><td bgcolor="yellow">5</td><td bgcolor="yellow">8</td><td bgcolor="yellow">7</td><td bgcolor="white">2</td><td bgcolor="white">6</td><td bgcolor="white">4</td><tr>
+  <tr><td bgcolor="white">7</td><td bgcolor="white">5</td><td bgcolor="white">2</td><td bgcolor="yellow">6</td><td bgcolor="yellow">4</td><td bgcolor="yellow">3</td><td bgcolor="white">8</td><td bgcolor="white">1</td><td bgcolor="white">9</td><tr>
+  </table>  
+</td></tr>
+
+<tr><td>
+<h3>Comments/Thoughts</h3>
+This isn't as efficient as Tonys version in that it will keep revisiting rule attempts regardless of prior success or not.
+<p>
+It isn't infallible, there are puzzles which it cannot solve. Whether it is because the puzzle is unsolvable, or just that this 
+code can't solve it I'm not quite sure :-( 
+<p>
+<a href="http://www.websudoku.com" title="Link to online sudoku games"> Websudoku</a> offers many puzzles of varying difficulty.
+<p>
+Feel free to email me with any thoughts or comments
+</td></tr>
+
+</table>
+
+</body>
+
+</HTML>

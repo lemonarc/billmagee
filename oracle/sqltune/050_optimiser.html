@@ -1,0 +1,219 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  An introduction to SQL statement tuning
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>AN INTRODUCTION TO ORACLE SQL STATEMENT TUNING</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 21st Feb 2003 </FONT><br>
+<hr>
+
+<p>
+  <FONT SIZE=4> <b>THE ORACLE OPTIMISER</b></FONT><br>
+<p>
+
+<p><FONT SIZE=3><b>Introduction</b></FONT><p>
+Prior to beginning the actual work to satisfy a query Oracle takes a look around and decides on what
+it thinks is the best way to perform the query. A table may have a number of indexes, they may be
+composite, unique, functional etc. The statement may have a number of joins across many tables with
+many conditions and there could be various ways to perform the same operation.
+<p>
+The optimiser gathers information about the various options and considers how a full table scan, an index
+scan and different ordering of those scans would result in different performance and workload.
+<p>
+There are two main modes in which the optimiser can operate. The Optimiser Mode as it is known is set on the
+database instance by the DBA's. You can find out which mode is in use with the following query.
+<p>
+<PRE CLASS="CE2">
+   SELECT VALUE
+   FROM   v$parameter
+   WHERE  NAME = 'optimizer_mode';
+
+   NAME
+   ====
+   CHOOSE
+</PRE>
+
+The possible values of optimizer_mode are
+<ul>
+   <li>CHOOSE</li>
+   <li>FIRST_ROWS</li>
+   <li>ALL_ROWS</li>
+   <li>RULE</li>
+</ul>
+FIRST_ROWS and ALL_ROWS explicitly use the cost based optimiser. RULE uses the rule based optimiser and
+CHOOSE allows Oracle to choose on an individual query basis. The variations on the ALL_ROWS or FIRST_ROWS
+indicate to Oracle whether it should aim to complete the entire job with the minimum of work, or whether
+it should aim to return it's first response as soon as possible.
+<p>
+In a batch operation where no users are involved it is preferable to have the entire job completed with
+the minimum of work whereas when you have a user waiting for a result, it is preferable to have the first
+item in a list appear while Oracle is still working on obtaining the rest of the list.
+<p>
+As a very simple rule of thumb, databases on Oracle versions upto 7.3 are usually configured to use the
+rule based optimiser. From version 8 onwards, the cost based optimiser became the default, recommended
+method and is usually in use.
+<p>
+
+
+
+
+<p><FONT SIZE=3><b>Table and index statistics</b></FONT><p>
+For rule based optimisation, table and index statistics are not required. For cost based optimisation
+the statistics need to exist on atleast one of the tables being referenced.
+<p>
+Statistics are needed by the cost based optimiser in order for it to determine the best access path to the
+data you require. Consider a table containing the gender and age of 20000 people. If you wanted to obtain
+all the males aged 34 and the table had an index on gender and an index on age there would be two
+possibilities.
+<ul>
+   <li>Use the gender index to first obtain all males and then go through the result set finding the 34 year olds</li>
+   <li>Use the age index to first obtain all 34 year olds and then search the result set finding the males</li>
+</ul>
+
+Consider both approaches. We know there are 20,000 people in the table. If we used the index to find
+all males it is fair to say we would return about 10,000 rows. We would then have 10,000 rows with no
+index available and so would have to search through the 10,000 taking out non 34 year olds from the result set.
+If we used the index to find all 34 year olds first, it would be fair to say we would return about 200
+rows which we would then have to look through manually finding the males.
+<p>
+It is clear then that somehow Oracle needs to know the makeup of an index, ie how selective it is for the
+given data (or index expression). Oracle documentation is not particularly clear to me on the terminology
+used. They refer to selectivity and cardinality. I'll probably get shot down for this, but in my mind I
+call it the granularity of the index.
+<p>
+The granularity of the gender index could be said to be about 0.5 and the granularity of the age
+index about 0.01.
+<p>
+These figures can be obtained by instructing Oracle to Analyze the table and it's indexes.
+<p>
+<PRE CLASS="CE2">
+   ANALYZE TABLE PEOPLE COMPUTE STATISTICS;
+   ANALYZE TABLE PEOPLE COMPUTE STATISTICS FOR ALL INDEXES;
+</PRE>
+
+The resulting values can be seen in the system views USER_TABLES and USER_INDEXES. From Oracle 8 onwards
+(I don't know about 7 and don't have one here to check) you can use the DBMS_UTILITY package to have
+an entire schema or instance analyzed. I should mention that I have seen reports of erratic behaviour
+on 9 onwards when using DBMS_UTILITY to analyse the schema. You should check this for yourself.
+<p>
+Since writing this, it has been brought to my attention that Tom Kyte (a virtual reference library of Oracle knowledge) has
+said that for gathering statistics ...
+<PRE CLASS="CE2">
+   DBMS_UTILITY PACKAGE  : is deprecated
+   ANALYZE TABLE COMMAND : works but is not preferred
+   DBMS_STATS PACKAGE    : is the preferred method
+</PRE>
+Certainly the ANALYZE TABLE command is very straight forward to use, and to get you moving forward into SQL
+statement tuning it should suffice for the moment. DBMS_STATS is far more powerful, but is also quite involved.
+<p>
+When instructing Oracle to perform object or schema analysis you can also indicate whether it should
+compute the statistics (perform exact counts to get the statistics) or estimate the statistics (work on
+a subset of the data to come up with a reasonable estimation). For very large tables it is usually best to
+estimate the statistics.
+<p>
+Refer to Oracle documentation for
+exact syntax of the ANALYZE TABLE command, DBMS_UTILITY functions and DBMS_STATS functions applicable to
+your database version.
+<p>
+When SQL is being optimised through the RULE based optimiser there is no benefit to having
+statistics on your tables or indexes. The statistics are not used to effect the actual access paths.
+<p>
+When using the cost based optimiser you should also ensure that your statistics are up to date. The
+statistics on a table or index are correct at the time that table or index was last analysed. If the
+demographics of your table have changed substantially you should bring the statistics up to date
+by having the statistics re-estimated or computed.
+
+
+
+
+
+
+<p><FONT SIZE=3><b>The rule based optimiser</b></FONT><p>
+The rule based optimiser, as it's name suggests follows a set of fairly comprehensive rules for accessing
+data. The rules are ranked in order of usual performance and Oracle will always use the highest ranked
+rules to perform the data access.
+<p>
+Essentially, each predicate (part of your where clause) causes workload. By looking at what indexes are
+available and what would be the likely workload against that index, Oracle forms it's execution plan.
+For instance, Oracle would usually execute an equals predicate first rather than a range predicate over
+an index. Quite simply the equals predicate is generally more likely to return less data and so have
+less disk I/O.
+<p>
+The rules are a little more complex than this and the Oracle documentation goes into some detail
+explaining each of the rules and their ranks.
+<p>
+Prior to version 8, the rule based optimiser was the optimiser of choice, and the default for a database.
+The cost based optimiser was still a little flaky and the reliability of the rule based optimiser to
+produce consistent access plans was a definate advantage.
+<p>
+
+
+
+
+<p><FONT SIZE=3><b>The cost based optimiser</b></FONT><p>
+The cost based optimiser determines the cost of various different access methods against a query and will
+always use the method with the lowest cost.
+<p>
+The Oracle documentation both gives a measurable unit to the cost (one unit of Disk I/O but can also
+be configured to measure network traffic or CPU work) and also states that the Cost has no actual measure,
+ie it is there as a guide. Thanks guys.
+<p>
+Whilst the cost figure can be a useful indicator of a statement, it should not be used as the final
+target for your tuning goals. As the cost may or may not only measures disk I/O it may or may not not
+include the amount of memory used by your query, or the amount of CPU time.
+<p>
+That all sounds a bit confusing, so in plain terms the Cost is calculated as some arbitrary unit of
+work. It's only value is in comparing one execution plan to another, but do not rely on it as the single
+measure of workload.
+<p>
+Consider the following...
+<PRE CLASS="CE2">
+   CREATE OR REPLACE FUNCTION DONT_RUN_THIS RETURN NUMBER AS
+   BEGIN
+      RETURN DONT_RUN_THIS;
+   END DONT_RUN_THIS;
+   /
+   SELECT DONT_RUN_THIS FROM DUAL;
+   /
+</PRE>
+Obviously this is a far fetched piece of code, but it demonstrates that while it has no
+Disk I/O it would actually bring your server to it's knees. With each iteration, slightly more memory
+would be allocated to the process and it would also be using up all available CPU time.
+<p>
+There are some scenarios where the cost based optimiser can get it wrong. In the standard form of gathering
+statistics there is no allowance for how data may be 'skewed'. An example would be a table recording the
+favourite number of 1 million different people. Quite likely a large number of people might choose 7 as
+their favourite number. For arguments sake let's say it's 95%.
+<p>
+We could have the "number" column indexed but under the cost based optimiser with standard statistics, a query
+on that table of the form
+<PRE CLASS="CE2">
+   SELECT NAME
+   FROM   FAVOURITE_NUMBERS
+   WHERE  NUMBER = 6;
+</PRE>
+would almost certainly force a full table scan. The reason is that Oracle would have through the statistics
+determined that the index has a very low granularity (almost all of the values are the same). It would
+therefore decide that it is likely to be returning almost all of the rows of the table even if it uses
+the index and so it would wrongly decide that a full table scan is quicker. Clearly that is wrong. If
+Oracle had a better understanding of the skew of data in the table it would recognise that when querying
+any favourite number except 7, the index path is quicker but when querying 7, the index path is redundant.
+<p>
+To allow the optimiser to understand the data skew, histograms can be generated on the data as part of the statistics
+gathering process. The actuall processes involved and the background to understanding histograms appears fairly involved.
+I need to understand them far better myself before writing about them here. Watch for a separate paper on histograms.
+<p>
+The cost based optimiser is the optimiser of choice for databases from version 8 onwards. It does
+require that upto date statistics be maintained for your indexes and tables and while preferable to
+the rule based optimiser it still has some pitfalls.
+<p>
+
+
+<a href="index.html" title="Back to main contents page">Back to Contents</a>
+
+</HTML>

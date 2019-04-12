@@ -1,0 +1,152 @@
+<HTML>
+  <HEAD>
+    <meta HTTP-EQUIV="content-type" CONTENT="text/html; charset=ISO-8859-1">
+	<title>
+	  An introduction to SQL statement tuning
+	</title>
+  </HEAD>
+
+<hr>
+  <FONT SIZE=4> <b>AN INTRODUCTION TO ORACLE SQL STATEMENT TUNING</b></FONT><br>
+  <FONT SIZE=2> Bill Magee    </FONT><br>
+  <FONT SIZE=2> 21st Feb 2003 </FONT><br>
+<hr>
+
+<p><FONT SIZE=4> <b>INTRODUCTION TO SQL PERFORMANCE TUNING</b></FONT><br>
+
+
+
+
+<p><FONT SIZE=3> <b>General</b></FONT><p>
+
+A few days ago, with a little spare time on my hands I was sitting at a clients site skipping through
+some performance views on a development server when a statement jumped out, grabbed me by the throat
+and started to strangle me, I was fighting for breath, dripping with sweat and beginning to feel the life
+draining from my body.
+<p>
+
+I could smell burning, was it nausea from the lack of oxygen... and what was that cackling laugh
+I kept hearing? Determined to find out I managed to extricate myself from the murderous statement and looked on
+from a distance.
+<p>
+
+Clearly this statement had military training - it was fighting on two fronts! As well as suffocating me
+it was trying to kill the server, merrily ripping ram chips from it and cackling away as they were
+destroyed, and was that glue I could see dripping from the drive arrays causing them to run at a crawl?
+Surely not, in between ram chips, this evil little statement was pumping glue into the drives.
+<p>
+
+At this rate, the server would soon be on it's knees begging. No wonder it was so slow,
+what with it's diminished ram capacity, and constant struggle against the rapidly hardening glue, this
+server was in a fight to the death with this statement.
+<p>
+
+This intrigued me, Oracle servers have highly trained, highly motivated and adaptable armies of men who
+can jump to it's defence against statements like this. They can analyse it from a distance before it
+even gets close to their defences and prepare to outmanouvre it, adapt to it's offensive capabilities and
+spit out the remains in a blink of an eye.
+<p>
+
+So what on earth was this statement, I had to find out. It must be a really complex statement, multiple
+sorts, table scans, complex inner and outer joins, I could feel this was going to be a biggie. I assembled
+some trusted allies and went deep into enemy territory, prepared to meet my maker in this behemoth of a
+statement.
+
+<PRE CLASS="CE2">
+   SELECT MPRN
+   FROM   TLM_CONSUMERS
+   WHERE  ZGC = 21991022
+</PRE>
+
+Hardly a battle hardened scary thing is it?
+
+
+
+
+<p><FONT SIZE=3> <b>The need for tuning, a simple example</b></FONT><p>
+
+Taking the above statement and checking the table, there was a unique index on the ZGC column. So what
+was the problem?
+<p>
+
+I obtained an explain plan for the statement and sure enough Oracle was doing a full table scan for this
+statement, each and every time it was run. The statement had been executed 331 times over the past few
+days and caused disk reads of 180 Gigs. In fact this statement and its multiple executions were responsible
+for approximately 90% of the workload on the Server. Here was the glue in the hard drives.
+<p>
+
+Quite simply, the ZGC column (and therefore the index) is a VARCHAR2 column. The value being looked for
+was a numeric and so Oracle didn't use the index. It was performing a full table scan on 1.2 million rows
+and had done so 331 times over the past few days.
+<p>
+
+To put that in context, Oracle was having to physically read an average of 200Mb per minute, every minute
+just to satisfy this statement. I imagine the execution time of this statement was somewhere in the 10's
+of minutes.
+<p>
+
+A simple change to the statement of adding single quotes around the value like this<br>
+<PRE CLASS="CE2">
+   SELECT MPRN
+   FROM   TLM_CONSUMERS
+   WHERE  ZGC = '21991022'
+</PRE>
+resulted in a lightning fast execution time as would be expected, and almost zero workload on the server.
+Not only would the user or process executing the statement notice the difference, everyone using that
+server would notice the difference.
+
+
+
+
+<p><FONT SIZE=3> <b>Poor SQL or a slow server... who can we shout at?</b></FONT><p>
+
+I once worked with a developer who had a written a piece of PL/SQL to perform a task, it was taking three
+hours to complete. There was absolutely no way to account for this as the volume of data on the box was so
+small you simply could not imagine any possible way for anything to take so long.
+<p>
+
+Having a quick look at the code, I pointed out to him where the code could be tuned and where the code
+was badly inefficient. His view was "I'm paid to make it work, not to make it fast" and left it. His
+entire view was quite simply that performance was not his problem. This was the same developer who
+constantly complained about how slow Oracle is.
+<p>
+
+Had this code made it to production, there would have been 500 users also wondering why Oracle was so
+slow. The reality was the 'couldn't care less developer' moved on and one of the other developers spent
+15 minutes tuning the code. It resulted in a job which ran in 10 minutes and left the users with a
+pleasant, softly focused, cosy feeling about Oracle.
+<p>
+
+So who should we shout at? The developers? No, not necessarily. The murderous statement I mentioned in
+the first section above was actually generated by a report designer tool. The developer of the report
+had little or no control of the SQL it generated. In fact it was a deficiency of the tool in that it
+was not correctly querying the Oracle dictionaries before constructing it's SQL.
+<p>
+
+Statements like that appear for many reasons, maybe someone has dropped an index from a table and what
+was once a highly efficient statement turns into a dog.
+<p>
+
+Maybe that couldn't care less developer has just started on your site?
+<p>
+
+Maybe automatically generated code which people have no control over is grinding the server to it's knees.
+<p>
+
+In my experience most developers are conscientious people who take pride in their work and would readily
+spend a few minutes tuning their SQL for performance. The problem often lies in a lack of knowledge of
+exactly where to start, or from a foundation in some other desktop database where SQL optimisation was
+not possible. Hopfully this document will aid those in their quest for better performance.
+<p>
+The purpose of this document is not to offer a complete, detailed look at SQL tuning and what Oracle
+offers - the Oracle documentation already does that. The problem with the Oracle documentation is that
+it is so detailed you would have to read it for six months to get a grasp on how to tune your statements.
+<p>
+Instead, this document is aimed at those getting started in Oracle/SQL or those developers who have
+not yet ventured into tuning their statements. Hopefully it will provide a fairly easy route
+into the fascinating area of Oracle performance.
+<p>
+
+<a href="index.html" title="Back to main contents page">Back to Contents</a>
+
+</HTML>
