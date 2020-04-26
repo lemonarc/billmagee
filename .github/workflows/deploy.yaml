@@ -21,4 +21,4 @@ jobs:
       run: doctl kubernetes cluster kubeconfig save shared-hosting
 
     - name: Deploy new code
-      run: kubectl rollout restart ${{ secrets.DEPLOYMENT_NAME }}
+      run: kubectl rollout restart deployment ${{ secrets.DEPLOYMENT_NAME }}
