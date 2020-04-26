@@ -12,6 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+    - name: Commit to repository
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        COMMIT_MSG: Deploy to GitHub
+      run: |
+        # Hard-code user configuration
+        git config user.email "contact@lemonarc.com"
+        git config user.name "Lemon Arc Bot"
+        # Update origin with token
+        git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+        # Checkout the branch so we can push back to it
+        git checkout -B deploy
+        git add .
+        # Only commit and push if we have changes
+        git diff --quiet && git diff --staged --quiet || (git commit -m "${COMMIT_MSG}"; git push origin master)
+ 
     - name: Install doctl
       uses: digitalocean/action-doctl@v2
       with:
